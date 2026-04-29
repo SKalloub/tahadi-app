@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+@theme {
+  /* هون إذا بدك تضيف ألوان مخصصة مستقبلاً */
+}
+
+@layer base {
+  body {
+    background-color: #020617; /* Slate 950 */
+    color: white;
+    direction: rtl;
+    margin: 0;
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+}
