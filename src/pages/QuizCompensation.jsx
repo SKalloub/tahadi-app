@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { PlayCircle, SkipForward, Trophy, HelpCircle } from 'lucide-react';
+import { PlayCircle, SkipForward, Trophy, HelpCircle, Trash2 } from 'lucide-react';
 
 export default function QuizCompensation() {
   const [players, setPlayers] = useState([]);
@@ -7,14 +7,41 @@ export default function QuizCompensation() {
   const [visibleClubsCount, setVisibleClubsCount] = useState(1);
   const [showName, setShowName] = useState(false);
 
-  useEffect(() => {
+  const loadPlayers = () => {
     const data = JSON.parse(localStorage.getItem('players') || '[]');
     if (data.length > 0) {
       setPlayers(data.sort(() => Math.random() - 0.5));
     }
+  };
+
+  useEffect(() => {
+    loadPlayers();
   }, []);
 
-  // إذا ما في داتا، اعطيني هاد الشكل عشان نعرف إنه الموقع شغال
+  // دالة حذف اللاعب الحالي من الذاكرة واللعبة فوراً
+  const deleteCurrentPlayer = () => {
+    if (!window.confirm('بدك تحذف هاد اللاعب نهائياً من القائمة؟')) return;
+
+    const currentPlayer = players[currentIndex];
+    // الحذف من الـ localStorage (بناءً على الاسم أو الـ id إذا توفر)
+    const allStoredPlayers = JSON.parse(localStorage.getItem('players') || '[]');
+    const updatedStored = allStoredPlayers.filter(p => p.name !== currentPlayer.name);
+    localStorage.setItem('players', JSON.stringify(updatedStored));
+
+    // تحديث الحالة في الواجهة
+    const updatedLocal = players.filter((_, i) => i !== currentIndex);
+    setPlayers(updatedLocal);
+    
+    // إعادة ضبط العدادات للاعب التالي
+    setShowName(false);
+    setVisibleClubsCount(1);
+    
+    // إذا حذفنا آخر لاعب في القائمة، نرجع للبداية
+    if (currentIndex >= updatedLocal.length) {
+      setCurrentIndex(0);
+    }
+  };
+
   if (players.length === 0) return (
     <div className="flex flex-col items-center justify-center mt-20 p-10 border-2 border-dashed border-slate-700 rounded-[3rem] text-slate-500">
       <HelpCircle size={48} className="mb-4 opacity-20" />
@@ -36,7 +63,19 @@ export default function QuizCompensation() {
       <div className="w-full max-w-md bg-slate-900/80 backdrop-blur-xl p-8 rounded-[2.5rem] border border-white/10 shadow-2xl relative">
         <div className="flex justify-between items-center mb-6">
           <Trophy className="text-yellow-500" size={24} />
-          <span className="text-slate-500 font-mono font-bold">PLAYER {currentIndex + 1}/{players.length}</span>
+          <div className="flex items-center gap-4">
+            {/* زر الحذف الجديد */}
+            <button 
+              onClick={deleteCurrentPlayer}
+              className="text-slate-600 hover:text-red-500 transition-colors p-1"
+              title="حذف اللاعب"
+            >
+              <Trash2 size={20} />
+            </button>
+            <span className="text-slate-500 font-mono font-bold uppercase tracking-tighter">
+              PLAYER {currentIndex + 1}/{players.length}
+            </span>
+          </div>
         </div>
         
         <p className="text-slate-400 text-sm mb-4 tracking-widest uppercase">مسيرة لاعب {currentPlayer.status}</p>
