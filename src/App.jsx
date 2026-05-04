@@ -7,6 +7,8 @@ import QuizCompensation from './pages/QuizCompensation';
 import QuizBell from './pages/QuizBell';
 import AddNumbers from './pages/AddNumbers';
 import QuizNumbers from './pages/QuizNumbers';
+import AddTables from './pages/AddTables';
+import QuizTables from './pages/QuizTables';
 function App() {
   return (
     <Router>
@@ -30,6 +32,8 @@ function App() {
             <Route path="/quiz-bell" element={<QuizBell />} />
             <Route path="/add-numbers" element={<AddNumbers />} />
             <Route path="/quiz-numbers" element={<QuizNumbers />} />
+            <Route path="/add-tables" element={<AddTables />} />
+            <Route path="/quiz-tables" element={<QuizTables />} />
           </Routes>
         </main>
       </div>
