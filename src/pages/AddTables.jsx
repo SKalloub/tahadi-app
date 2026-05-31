@@ -1,165 +1,164 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Save, Plus, Trash2, Download, Upload, ArrowRight, Table as TableIcon } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { LayoutGrid, Trash2, HelpCircle, ArrowRight, FolderPlus, Save } from 'lucide-react';
 import { getStorageData, saveStorageData } from '../lib/storage';
 
 export default function AddTables() {
-  const [tables, setTables] = useState([]);
-  const [selectedTableIdx, setSelectedTableIdx] = useState(null);
-  const fileInputRef = useRef(null);
+  const [selectedTourney, setSelectedTourney] = useState(null);
+
+  const tournamentsList = {
+    ucl: 'دوري أبطال أوروبا', cwc: 'كأس العالم للأندية', facup: 'كأس إنجلترا',
+    copadelrey: 'كأس إسبانيا', coppaitalia: 'كأس إيطاليا', dfbpokal: 'كأس ألمانيا',
+    cdf: 'كأس فرنسا', seriea: 'الدوري الإيطالي', laliga: 'الدوري الإسباني',
+    epl: 'الدوري الإنجليزي', ligue1: 'الدوري الفرنسي', bundesliga: 'الدوري الألماني',
+    eredivisie: 'الدوري الهولندي', wc: 'كأس العالم', euro: 'اليورو',
+    coba: 'كوبا أمريكا', uel: 'الدوري الأوروبي', uecl: 'دوري المؤتمرات',
+    cwc_old: 'كأس الكؤوس الأوروبية', others: 'دوريات أخرى'
+  };
+
+  // --- States لفئات وأسئلة الجرس ---
+  const [newCatName, setNewCatName] = useState('');
+  const [savedCats, setSavedCats] = useState([]);
+  const [selectedCat, setSelectedCat] = useState('');
+  const [quizForm, setQuizForm] = useState({ question: '', answer: '' });
+  const [savedQuestions, setSavedQuestions] = useState([]);
 
   useEffect(() => {
-    setTables(getStorageData('footballTables', []));
-  }, []);
+    if (selectedTourney) {
+      const cats = getStorageData(`t_cats_${selectedTourney}`, []);
+      setSavedCats(cats);
+      if (cats.length > 0) setSelectedCat(cats[0]);
+      setSavedQuestions(getStorageData(`t_questions_${selectedTourney}`, []));
+    }
+  }, [selectedTourney]);
 
-  const createNewTable = () => {
-    const name = prompt("اسم الجدول (مثلاً: تاريخ الدوري الهولندي):");
-    if (!name) return;
-    const columns = prompt("الأعمدة (افصل بينها بفاصلة):", "العام,الفريق الفائز,المدرب,الهداف");
-    if (!columns) return;
-
-    const newTable = {
-      id: Date.now(),
-      name,
-      columns: columns.split(',').map(c => c.trim()),
-      rows: []
-    };
-    const updated = [...tables, newTable];
-    setTables(updated);
-    saveStorageData('footballTables', updated);
+  // إنشاء فئة جرس جديدة
+  const addCategory = () => {
+    const name = newCatName.trim();
+    if (!name || savedCats.includes(name)) return alert('اسم فئة غير صالح أو مكرر');
+    const updated = [...savedCats, name];
+    saveStorageData(`t_cats_${selectedTourney}`, updated);
+    setSavedCats(updated);
+    setSelectedCat(name);
+    setNewCatName('');
   };
 
-  const addRow = (tableIdx) => {
-    const updated = [...tables];
-    const newRow = {};
-    updated[tableIdx].columns.forEach(col => newRow[col] = "");
-    updated[tableIdx].rows.push(newRow);
-    setTables(updated);
+  // حذف فئة جرس بكل أسئلتها
+  const deleteCategory = (catName) => {
+    if (!window.confirm(`هل أنت متأكد من حذف فئة [${catName}] وجميع الأسئلة التابعة لها؟`)) return;
+    const updatedCats = savedCats.filter(c => c !== catName);
+    const updatedQs = savedQuestions.filter(q => q.category !== catName);
+    
+    saveStorageData(`t_cats_${selectedTourney}`, updatedCats);
+    saveStorageData(`t_questions_${selectedTourney}`, updatedQs);
+    
+    setSavedCats(updatedCats);
+    setSavedQuestions(updatedQs);
+    if (selectedCat === catName) setSelectedCat(updatedCats[0] || '');
   };
 
-  const updateCell = (tableIdx, rowIdx, col, value) => {
-    const updated = [...tables];
-    updated[tableIdx].rows[rowIdx][col] = value;
-    setTables(updated);
+  // حفظ سؤال داخل الفئة المختارة
+  const saveQuestion = () => {
+    if (!selectedCat) return alert('أنشئ فئة جرس واخترها أولاً!');
+    if (!quizForm.question || !quizForm.answer) return alert('اكتب السؤال والجواب!');
+    const newQ = { id: Date.now(), category: selectedCat, ...quizForm };
+    const updated = [...savedQuestions, newQ];
+    saveStorageData(`t_questions_${selectedTourney}`, updated);
+    setSavedQuestions(updated);
+    setQuizForm({ question: '', answer: '' });
+    alert('تم حفظ سؤال الجرس بنجاح! ⚡');
   };
 
-  const saveAll = () => {
-    saveStorageData('footballTables', tables);
-    alert("تم الحفظ بنجاح! 💾");
+  const deleteQuestion = (id) => {
+    const updated = savedQuestions.filter(q => q.id !== id);
+    saveStorageData(`t_questions_${selectedTourney}`, updated);
+    setSavedQuestions(updated);
   };
 
-  const exportJSON = () => {
-    const blob = new Blob([JSON.stringify(tables, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `tables_backup_${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-  };
-
-  const importJSON = (e) => {
-    const file = e.target.files[0];
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const data = JSON.parse(event.target.result);
-        setTables(data);
-        saveStorageData('footballTables', data);
-        alert("تم الاستيراد بنجاح! ✅");
-      } catch (err) { alert("ملف غير صالح! ❌"); }
-    };
-    reader.readAsText(file);
-  };
-
-  return (
-    <div className="max-w-6xl mx-auto py-10 px-4 pb-32">
-      <div className="flex justify-between items-center mb-10">
-        <h1 className="text-3xl font-black text-white italic">إدارة الجداول 📊</h1>
-        <div className="flex gap-3">
-          <input type="file" ref={fileInputRef} onChange={importJSON} className="hidden" />
-          <button onClick={() => fileInputRef.current.click()} className="p-3 bg-slate-800 text-slate-300 rounded-xl hover:text-white"><Upload size={20}/></button>
-          <button onClick={exportJSON} className="p-3 bg-slate-800 text-slate-300 rounded-xl hover:text-white"><Download size={20}/></button>
-          <button onClick={createNewTable} className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2">
-            <Plus size={20}/> جدول جديد
-          </button>
+  if (!selectedTourney) {
+    return (
+      <div dir="rtl" className="max-w-5xl mx-auto py-8 px-4 font-sans text-white">
+        <div className="text-center mb-10 space-y-2">
+          <h2 className="text-4xl font-black italic text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-amber-500 flex items-center justify-center gap-3">
+            <LayoutGrid size={36} /> إدارة فئات جرس البطولات 🔔
+          </h2>
+          <p className="text-slate-400 font-bold text-sm">اختر البطولة لحقن وإدارة فئات الأسئلة الخاصة بها</p>
         </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        {/* Sidebar: Table List */}
-        <div className="space-y-3">
-          {tables.map((t, idx) => (
-            <button 
-              key={t.id} 
-              onClick={() => setSelectedTableIdx(idx)}
-              className={`w-full text-right p-4 rounded-2xl border transition-all ${selectedTableIdx === idx ? 'bg-purple-600 border-purple-400 text-white shadow-lg' : 'bg-slate-800/40 border-white/5 text-slate-400 hover:border-purple-500/50'}`}
-            >
-              <div className="font-bold">{t.name}</div>
-              <div className="text-[10px] opacity-60 uppercase">{t.rows.length} سطر</div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {Object.entries(tournamentsList).map(([key, name]) => (
+            <button key={key} onClick={() => setSelectedTourney(key)} className="bg-slate-800/60 hover:bg-slate-700/80 p-6 rounded-3xl border border-white/5 hover:border-yellow-500/40 transition-all text-center font-black text-sm group">
+              <span className="group-hover:text-yellow-400 transition-colors block">{name}</span>
             </button>
           ))}
         </div>
+      </div>
+    );
+  }
 
-        {/* Main: Table Editor */}
-        <div className="md:col-span-3">
-          {selectedTableIdx !== null ? (
-            <div className="bg-slate-800/40 border border-white/5 rounded-[2.5rem] p-6 overflow-hidden">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-bold text-white">{tables[selectedTableIdx].name}</h2>
-                <button onClick={() => addRow(selectedTableIdx)} className="text-green-500 hover:bg-green-500/10 p-2 rounded-lg flex items-center gap-1 text-sm font-bold">
-                  <Plus size={16}/> إضافة سطر
-                </button>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-right border-collapse">
-                  <thead>
-                    <tr>
-                      {tables[selectedTableIdx].columns.map(col => (
-                        <th key={col} className="p-4 text-slate-500 text-xs font-black border-b border-white/5 uppercase tracking-wider">{col}</th>
-                      ))}
-                      <th className="w-10"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tables[selectedTableIdx].rows.map((row, rIdx) => (
-                      <tr key={rIdx} className="group hover:bg-white/[0.02]">
-                        {tables[selectedTableIdx].columns.map(col => (
-                          <td key={col} className="p-2 border-b border-white/5">
-                            <input 
-                              className="w-full bg-transparent text-white p-2 rounded-lg outline-none focus:bg-slate-900 border border-transparent focus:border-purple-500/30 text-sm"
-                              value={row[col]}
-                              onChange={(e) => updateCell(selectedTableIdx, rIdx, col, e.target.value)}
-                            />
-                          </td>
-                        ))}
-                        <td className="p-2 border-b border-white/5">
-                          <button 
-                            onClick={() => {
-                              const updated = [...tables];
-                              updated[selectedTableIdx].rows.splice(rIdx, 1);
-                              setTables(updated);
-                            }}
-                            className="text-slate-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <Trash2 size={16}/>
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <button onClick={saveAll} className="w-full mt-8 bg-white/10 hover:bg-white/20 text-white py-4 rounded-2xl font-black flex items-center justify-center gap-2">
-                <Save size={20}/> حفظ جميع التعديلات
-              </button>
-            </div>
-          ) : (
-            <div className="h-64 flex flex-col items-center justify-center text-slate-500 border-2 border-dashed border-white/5 rounded-[2.5rem]">
-              <TableIcon size={48} className="mb-4 opacity-20"/>
-              <p>اختر جدولاً أو أنشئ واحداً جديداً للبدء</p>
-            </div>
-          )}
+  return (
+    <div dir="rtl" className="max-w-4xl mx-auto py-8 px-4 font-sans text-white pb-32">
+      <div className="flex justify-between items-center bg-yellow-500/10 p-6 rounded-[2rem] border border-yellow-500/20 mb-8">
+        <div>
+          <h3 className="text-2xl font-black text-yellow-400">بنك جرس بطولة: {tournamentsList[selectedTourney]}</h3>
         </div>
+        <button onClick={() => setSelectedTourney(null)} className="text-slate-400 hover:text-white flex items-center gap-1 text-sm font-bold bg-slate-800 px-4 py-2 rounded-xl">
+          <ArrowRight size={16} /> رجوع للبطولات
+        </button>
+      </div>
+
+      <div className="space-y-8 animate-in fade-in">
+        {/* إضافة فئة جديدة */}
+        <div className="bg-slate-800/40 p-6 rounded-3xl border border-white/5 flex gap-2 items-center">
+          <input className="flex-1 bg-slate-900 border border-white/10 p-3 rounded-xl text-white outline-none text-sm font-bold" placeholder="إضافة فئة أسئلة جديدة (مثال: مدربين، هدافو النهائيات، ملاعب)..." value={newCatName} onChange={e => setNewCatName(e.target.value)} />
+          <button onClick={addCategory} className="bg-yellow-500 text-black px-6 py-3 rounded-xl font-black text-xs flex items-center gap-1"><FolderPlus size={16}/> إنشاء الفئة</button>
+        </div>
+
+        {savedCats.length > 0 ? (
+          <div className="bg-slate-800/40 p-6 rounded-[2.5rem] border border-white/5 space-y-4 shadow-xl">
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-bold text-slate-400">الفئة المستهدفة حالياً للحقن:</span>
+              <select className="bg-slate-900 border border-white/10 p-2.5 rounded-xl text-yellow-500 text-xs font-black outline-none" value={selectedCat} onChange={e => setSelectedCat(e.target.value)}>
+                {savedCats.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+
+            <textarea className="w-full bg-slate-900 border border-white/10 p-4 rounded-2xl text-white outline-none h-20 focus:border-yellow-500 text-sm font-bold" placeholder="اكتب سؤال الجرس هنا..." value={quizForm.question} onChange={e => setQuizForm({...quizForm, question: e.target.value})} />
+            <input className="w-full bg-slate-900 border border-white/10 p-4 rounded-2xl text-white outline-none focus:border-yellow-500 text-sm font-black" placeholder="الإجابة النموذجية..." value={quizForm.answer} onChange={e => setQuizForm({...quizForm, answer: e.target.value})} />
+            <button onClick={saveQuestion} className="w-full bg-yellow-500 text-black py-4 rounded-2xl font-black text-sm hover:bg-yellow-400 shadow-lg">حفظ السؤال داخل فئة [{selectedCat}] 💾</button>
+          </div>
+        ) : (
+          <div className="text-center p-8 bg-slate-900/40 rounded-2xl border border-dashed border-white/10 text-slate-500 font-bold text-sm">
+            قم بإنشاء فئة أسئلة أولاً لتبدأ بإضافة أسئلة الجرس!
+          </div>
+        )}
+
+        {/* عرض الفئات الحالية وأسئلتها */}
+        {savedCats.length > 0 && (
+          <div className="space-y-6">
+            <h4 className="text-slate-400 text-xs font-black px-2 uppercase tracking-wider">الفئات المسجلة حالياً وأسئلتها:</h4>
+            <div className="space-y-4">
+              {savedCats.map(cat => (
+                <div key={cat} className="bg-slate-950/60 p-4 rounded-2xl border border-white/5 space-y-2">
+                  <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                    <span className="text-sm font-black text-yellow-500">📁 فئة: {cat}</span>
+                    <button onClick={() => deleteCategory(cat)} className="text-xs text-red-400 hover:text-red-500 bg-red-500/10 px-2 py-1 rounded-lg">حذف الفئة بالكامل 🗑️</button>
+                  </div>
+                  <div className="space-y-1.5">
+                    {savedQuestions.filter(q => q.category === cat).length === 0 ? (
+                      <p className="text-slate-600 text-xs italic p-2">لا توجد أسئلة في هذه الفئة بعد...</p>
+                    ) : (
+                      savedQuestions.filter(q => q.category === cat).map(q => (
+                        <div key={q.id} className="bg-slate-900/40 p-2.5 rounded-xl flex justify-between items-center text-xs">
+                          <span className="text-slate-300 font-bold">❓ {q.question} <strong className="text-green-400 mr-2">({q.answer})</strong></span>
+                          <button onClick={() => deleteQuestion(q.id)} className="text-slate-600 hover:text-red-400 px-1"><Trash2 size={14}/></button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
