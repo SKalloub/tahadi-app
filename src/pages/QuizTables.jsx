@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { HelpCircle, ArrowLeft, Play } from 'lucide-react';
-import { getStorageData } from '../lib/storage';
+import { collection, onSnapshot, query } from "firebase/firestore";
+import { database } from '../App';
 
 export default function QuizTables() {
   const [selectedTourney, setSelectedTourney] = useState(null);
@@ -11,7 +12,7 @@ export default function QuizTables() {
   const [curQIdx, setCurQIdx] = useState(0);
   const [revealAns, setRevealAns] = useState(false);
 
-  // داتا البطولة المفتوحة
+  // داتا البطولة المفتوحة لايف
   const [categories, setCategories] = useState([]);
   const [allQuestions, setAllQuestions] = useState([]);
 
@@ -25,19 +26,41 @@ export default function QuizTables() {
     cwc_old: 'كأس الكؤوس الأوروبية', others: 'دوريات أخرى'
   };
 
+  // جلب الأسئلة والفئات حياً من السيرفر فور اختيار البطولة
   useEffect(() => {
     if (selectedTourney) {
-      setCategories(getStorageData(`t_cats_${selectedTourney}`, []));
-      setAllQuestions(getStorageData(`t_questions_${selectedTourney}`, []));
+      const q = query(collection(database, "tournamentQuizzes"));
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const questionsList = [];
+        const catsSet = new Set();
+        
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          if (data.tournament === selectedTourney) {
+            questionsList.push({ ...data, id: doc.id });
+            if (data.category) catsSet.add(data.category);
+          }
+        });
+        
+        setAllQuestions(questionsList);
+        setCategories(Array.from(catsSet));
+      });
+
+      return () => unsubscribe();
+    } else {
+      setCategories([]);
+      setAllQuestions([]);
       setActiveQuizCat(null);
     }
   }, [selectedTourney]);
 
-  // تشغيل كويز الجرس
+  // تشغيل كويز الجرس بخلط صاعق وعشوائي
   const startCategoryQuiz = (catName) => {
     const q = allQuestions.filter(question => question.category === catName);
-    if (q.length === 0) return alert('هذه الفئة فاضية، أضف لها بعض الأسئلة من لوحة التحكم!');
-    setFilteredQuestions(q.sort(() => Math.random() - 0.5)); // خلط صاعق وعشوائي
+    if (q.length === 0) return alert('هذه الفئة فاضية على السيرفر، أضف لها بعض الأسئلة من لوحة التحكم!');
+    
+    // خلط عشوائي حقيقي
+    setFilteredQuestions([...q].sort(() => Math.random() - 0.5)); 
     setActiveQuizCat(catName);
     setCurQIdx(0);
     setRevealAns(false);
@@ -71,7 +94,7 @@ export default function QuizTables() {
     );
   }
 
-  // الشاشة الثالثة: واجهة لعب الجرس (نفس نظام كويز بيل الخرافي)
+  // الشاشة الثالثة: واجهة لعب الجرس
   if (activeQuizCat) {
     const activeQ = filteredQuestions[curQIdx];
     return (
@@ -87,7 +110,7 @@ export default function QuizTables() {
           <div className="bg-slate-800/90 backdrop-blur-xl p-10 rounded-[3rem] border border-white/10 shadow-2xl relative animate-in zoom-in-95 duration-300">
             <div className="flex justify-between items-center mb-8">
               <span className="bg-yellow-500/10 border border-yellow-500/20 px-3 py-1 rounded-xl text-xs font-black text-yellow-500">فئة: {activeQuizCat}</span>
-              <span className="bg-white/5 px-4 py-1 rounded-full text-xs font-mono text-white font-bold">{curQIdx + 1} / {filteredQuestions.length}</span>
+              <span className="bg-white/5 crystalline px-4 py-1 rounded-full text-xs font-mono text-white font-bold">{curQIdx + 1} / {filteredQuestions.length}</span>
             </div>
 
             <h2 className="text-2xl md:text-3xl font-black text-center leading-relaxed mb-12 text-white italic">
@@ -97,6 +120,7 @@ export default function QuizTables() {
             {revealAns && (
               <div className="bg-green-500/10 border border-green-500/20 p-6 rounded-2xl mb-8 animate-in zoom-in duration-300">
                 <p className="text-center text-green-400 text-2xl font-black">{activeQ.answer}</p>
+                <p className="text-[9px] text-center text-slate-500 mt-2 font-sans">بواسطة الكابتن: {activeQ.addedBy || 'مجهول'}</p>
               </div>
             )}
 
@@ -120,7 +144,7 @@ export default function QuizTables() {
     );
   }
 
-  // الشاشة الثانية: استعراض فئات الجرس التابعة للبطولة بشكل رائع ونظيف
+  // الشاشة الثانية: استعراض فئات الجرس التابعة للبطولة
   return (
     <div dir="rtl" className="max-w-4xl mx-auto py-8 px-4 font-sans text-white pb-32">
       <button onClick={() => setSelectedTourney(null)} className="mb-6 text-slate-400 hover:text-white text-sm flex items-center gap-1 font-bold bg-slate-800 px-4 py-2 rounded-xl w-fit"><ArrowLeft size={14}/> رجوع للبطولات الرئيسية</button>
@@ -137,7 +161,7 @@ export default function QuizTables() {
         </div>
         
         {categories.length === 0 ? (
-          <p className="text-slate-600 text-sm italic px-2">لا توجد فئات جرس مضافة حالياً في هذه البطولة، توجه للوحة التحكم لإضافتها...</p>
+          <p className="text-slate-600 text-sm italic px-2">لا توجد فئات جرس مضافة حالياً في هذه البطولة على السيرفر المشترك...</p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             {categories.map(catName => (

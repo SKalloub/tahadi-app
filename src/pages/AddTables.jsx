@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutGrid, Trash2, HelpCircle, ArrowRight, FolderPlus, Save } from 'lucide-react';
-import { getStorageData, saveStorageData } from '../lib/storage';
+import { LayoutGrid, Trash2, ArrowRight, FolderPlus } from 'lucide-react';
+import { collection, addDoc, onSnapshot, query, deleteDoc, doc } from "firebase/firestore";
+import { database } from '../App';
 
 export default function AddTables() {
   const [selectedTourney, setSelectedTourney] = useState(null);
@@ -15,63 +16,81 @@ export default function AddTables() {
     cwc_old: 'كأس الكؤوس الأوروبية', others: 'دوريات أخرى'
   };
 
-  // --- States لفئات وأسئلة الجرس ---
+  const currentAdmin = localStorage.getItem('admin_name') || 'مجهول';
+
+  // --- States ---
   const [newCatName, setNewCatName] = useState('');
   const [savedCats, setSavedCats] = useState([]);
   const [selectedCat, setSelectedCat] = useState('');
   const [quizForm, setQuizForm] = useState({ question: '', answer: '' });
   const [savedQuestions, setSavedQuestions] = useState([]);
 
+  // استماع حي وبث مباشر لأسئلة البطولة المحددة من الفايربيس
   useEffect(() => {
     if (selectedTourney) {
-      const cats = getStorageData(`t_cats_${selectedTourney}`, []);
-      setSavedCats(cats);
-      if (cats.length > 0) setSelectedCat(cats[0]);
-      setSavedQuestions(getStorageData(`t_questions_${selectedTourney}`, []));
+      const q = query(collection(database, "tournamentQuizzes"));
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const questionsList = [];
+        const catsSet = new Set();
+        
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          // فلترة الأسئلة التابعة فقط للبطولة الحالية المفتوحة بالركت شاشة
+          if (data.tournament === selectedTourney) {
+            questionsList.push({ ...data, id: doc.id });
+            if (data.category) catsSet.add(data.category);
+          }
+        });
+        
+        const currentCats = Array.from(catsSet);
+        setSavedQuestions(questionsList);
+        setSavedCats(currentCats);
+        
+        // اختيار أول فئة تلقائياً إن لم يختر المستخدم
+        if (currentCats.length > 0 && !selectedCat) {
+          setSelectedCat(currentCats[0]);
+        }
+      });
+      return () => unsubscribe();
+    } else {
+      setSavedQuestions([]);
+      setSavedCats([]);
+      setSelectedCat('');
     }
   }, [selectedTourney]);
 
-  // إنشاء فئة جرس جديدة
+  // إنشاء فئة مؤقتة أو حقنها لأول مرة
   const addCategory = () => {
     const name = newCatName.trim();
     if (!name || savedCats.includes(name)) return alert('اسم فئة غير صالح أو مكرر');
-    const updated = [...savedCats, name];
-    saveStorageData(`t_cats_${selectedTourney}`, updated);
-    setSavedCats(updated);
+    setSavedCats([...savedCats, name]);
     setSelectedCat(name);
     setNewCatName('');
   };
 
-  // حذف فئة جرس بكل أسئلتها
-  const deleteCategory = (catName) => {
-    if (!window.confirm(`هل أنت متأكد من حذف فئة [${catName}] وجميع الأسئلة التابعة لها؟`)) return;
-    const updatedCats = savedCats.filter(c => c !== catName);
-    const updatedQs = savedQuestions.filter(q => q.category !== catName);
-    
-    saveStorageData(`t_cats_${selectedTourney}`, updatedCats);
-    saveStorageData(`t_questions_${selectedTourney}`, updatedQs);
-    
-    setSavedCats(updatedCats);
-    setSavedQuestions(updatedQs);
-    if (selectedCat === catName) setSelectedCat(updatedCats[0] || '');
-  };
-
-  // حفظ سؤال داخل الفئة المختارة
-  const saveQuestion = () => {
+  // حفظ سؤال لايف بالـ Cloud مرتبط بالبطولة والفئة والمشرف الحالي
+  const saveQuestion = async () => {
     if (!selectedCat) return alert('أنشئ فئة جرس واخترها أولاً!');
     if (!quizForm.question || !quizForm.answer) return alert('اكتب السؤال والجواب!');
-    const newQ = { id: Date.now(), category: selectedCat, ...quizForm };
-    const updated = [...savedQuestions, newQ];
-    saveStorageData(`t_questions_${selectedTourney}`, updated);
-    setSavedQuestions(updated);
-    setQuizForm({ question: '', answer: '' });
-    alert('تم حفظ سؤال الجرس بنجاح! ⚡');
+    
+    try {
+      await addDoc(collection(database, "tournamentQuizzes"), {
+        tournament: selectedTourney,
+        category: selectedCat,
+        question: quizForm.question.trim(),
+        answer: quizForm.answer.trim(),
+        addedBy: currentAdmin
+      });
+      setQuizForm({ question: '', answer: '' });
+      alert('تم حفظ سؤال جرس البطولة بالـ Cloud المشترك! ⚡');
+    } catch (e) { alert("خطأ في شبكة الفايربيس!"); }
   };
 
-  const deleteQuestion = (id) => {
-    const updated = savedQuestions.filter(q => q.id !== id);
-    saveStorageData(`t_questions_${selectedTourney}`, updated);
-    setSavedQuestions(updated);
+  const deleteQuestion = async (id) => {
+    if (!window.confirm("حذف السؤال؟")) return;
+    try {
+      await deleteDoc(doc(database, "tournamentQuizzes", id));
+    } catch(e) { alert("فشل الحذف"); }
   };
 
   if (!selectedTourney) {
@@ -81,7 +100,7 @@ export default function AddTables() {
           <h2 className="text-4xl font-black italic text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-amber-500 flex items-center justify-center gap-3">
             <LayoutGrid size={36} /> إدارة فئات جرس البطولات 🔔
           </h2>
-          <p className="text-slate-400 font-bold text-sm">اختر البطولة لحقن وإدارة فئات الأسئلة الخاصة بها</p>
+          <p className="text-slate-400 font-bold text-sm">اختر البطولة لحقن وإدارة فئات الأسئلة الحية الخاصة بها للجميع</p>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {Object.entries(tournamentsList).map(([key, name]) => (
@@ -127,28 +146,30 @@ export default function AddTables() {
           </div>
         ) : (
           <div className="text-center p-8 bg-slate-900/40 rounded-2xl border border-dashed border-white/10 text-slate-500 font-bold text-sm">
-            قم بإنشاء فئة أسئلة أولاً لتبدأ بإضافة أسئلة الجرس!
+            قم بإنشاء فئة أسئلة أولاً لتبدأ بإضافة أسئلة الجرس المشتركة!
           </div>
         )}
 
-        {/* عرض الفئات الحالية وأسئلتها */}
+        {/* عرض الفئات الحالية وأسئلتها مع اسم الناشر المضيف */}
         {savedCats.length > 0 && (
           <div className="space-y-6">
-            <h4 className="text-slate-400 text-xs font-black px-2 uppercase tracking-wider">الفئات المسجلة حالياً وأسئلتها:</h4>
+            <h4 className="text-slate-400 text-xs font-black px-2 uppercase tracking-wider">الفئات المسجلة حالياً وأسئلتها اللايف:</h4>
             <div className="space-y-4">
               {savedCats.map(cat => (
                 <div key={cat} className="bg-slate-950/60 p-4 rounded-2xl border border-white/5 space-y-2">
                   <div className="flex justify-between items-center border-b border-white/5 pb-2">
                     <span className="text-sm font-black text-yellow-500">📁 فئة: {cat}</span>
-                    <button onClick={() => deleteCategory(cat)} className="text-xs text-red-400 hover:text-red-500 bg-red-500/10 px-2 py-1 rounded-lg">حذف الفئة بالكامل 🗑️</button>
                   </div>
                   <div className="space-y-1.5">
                     {savedQuestions.filter(q => q.category === cat).length === 0 ? (
                       <p className="text-slate-600 text-xs italic p-2">لا توجد أسئلة في هذه الفئة بعد...</p>
                     ) : (
                       savedQuestions.filter(q => q.category === cat).map(q => (
-                        <div key={q.id} className="bg-slate-900/40 p-2.5 rounded-xl flex justify-between items-center text-xs">
-                          <span className="text-slate-300 font-bold">❓ {q.question} <strong className="text-green-400 mr-2">({q.answer})</strong></span>
+                        <div key={q.id} className="bg-slate-900/40 p-2.5 rounded-xl flex justify-between items-center text-xs gap-4">
+                          <span className="text-slate-300 font-bold text-right flex-1">
+                            ❓ {q.question} <strong className="text-green-400 mr-2">({q.answer})</strong>
+                            <span className="text-[9px] bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded ml-2 font-mono">بواسطة: {q.addedBy || 'مجهول'}</span>
+                          </span>
                           <button onClick={() => deleteQuestion(q.id)} className="text-slate-600 hover:text-red-400 px-1"><Trash2 size={14}/></button>
                         </div>
                       ))

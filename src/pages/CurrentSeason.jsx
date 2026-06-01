@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { HelpCircle, ArrowLeft, Play, Plus, Trash2, FolderPlus } from 'lucide-react';
-import { getStorageData, saveStorageData } from '../lib/storage';
+import { HelpCircle, ArrowLeft, Play, Trash2, FolderPlus, Upload } from 'lucide-react';
+import { collection, onSnapshot, query, addDoc, deleteDoc, doc, where, writeBatch } from "firebase/firestore";
+import { database } from '../App';
 
 export default function CurrentSeason() {
   const [selectedLeague, setSelectedLeague] = useState(null); // الدوري المختار
@@ -12,9 +13,11 @@ export default function CurrentSeason() {
   const [curQIdx, setCurQIdx] = useState(0);
   const [revealAns, setRevealAns] = useState(false);
 
-  // داتا الموسم الحالي
+  // داتا الموسم الحالي لايف من السيرفر
   const [categories, setCategories] = useState([]);
   const [allQuestions, setAllQuestions] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   // Forms لعمليات الإضافة
   const [newCatName, setNewCatName] = useState('');
@@ -33,68 +36,171 @@ export default function CurrentSeason() {
     others: 'دوريات أخرى'
   };
 
-  // تحميل الفئات والأسئلة الخاصة بالدوري المختار
+  // تحميل الفئات والأسئلة الخاصة بالدوري المختار حياً من الـ Firestore
   useEffect(() => {
     if (selectedLeague) {
-      const storageKey = `curr_season_${selectedLeague}`;
-      setCategories(getStorageData(`cats_${storageKey}`, []));
-      setAllQuestions(getStorageData(`qs_${storageKey}`, []));
+      setLoading(true);
+      // جلب الأسئلة والكاتيغوريز الخاصة بهذا الدوري فقط
+      const q = query(collection(database, "currentSeason"), where("league", "==", selectedLeague));
+      
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const questionsList = [];
+        const catsSet = new Set();
+        
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          if (data.type === 'question') {
+            questionsList.push({ ...data, id: doc.id });
+          } else if (data.type === 'category') {
+            catsSet.add(data.name);
+          }
+        });
+        
+        setAllQuestions(questionsList);
+        setCategories(Array.from(catsSet));
+        setLoading(false);
+      });
+
+      return () => unsubscribe();
+    } else {
+      setCategories([]);
+      setAllQuestions([]);
       setSelectedCat(null);
       setIsQuizMode(false);
     }
   }, [selectedLeague]);
 
-  // --- عمليات إدارة الفئات ---
-  const handleAddCategory = () => {
+  // دالة استيراد الفئة والأسئلة من ملف الـ JSON المرفق
+  const handleJsonImport = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const fileReader = new FileReader();
+    fileReader.onload = async (event) => {
+      try {
+        const parsedData = JSON.parse(event.target.result);
+        
+        // التحقق من بنية الملف المرفق
+        const categoryName = parsedData.categoryName || parsedData.category;
+        const questionsArray = parsedData.questions;
+
+        if (!categoryName || !Array.isArray(questionsArray)) {
+          return alert('صيغة ملف الـ JSON غير متوافقة مع ملفات الفئات القديمة!');
+        }
+
+        if (questionsArray.length === 0) return alert('الملف لا يحتوي على أي أسئلة!');
+
+        if (!window.confirm(`هل تريد استيراد فئة [${categoryName}] ورفع ${questionsArray.length} سؤال تابع لها إلى دوري [${currentSeasonLeagues[selectedLeague]}]؟`)) return;
+
+        setImporting(true);
+        const batch = writeBatch(database);
+        const currentSeasonRef = collection(database, "currentSeason");
+
+        // 1. إضافة وثيقة الفئة (Category) أولاً إذا لم تكن موجودة بالقائمة الحالية
+        if (!categories.includes(categoryName)) {
+          const newCatDocRef = doc(currentSeasonRef);
+          batch.set(newCatDocRef, {
+            type: 'category',
+            name: categoryName,
+            league: selectedLeague
+          });
+        }
+
+        // 2. فك وحقن الأسئلة داخل الـ Batch
+        questionsArray.forEach((item) => {
+          const newQuestionDocRef = doc(currentSeasonRef);
+          batch.set(newQuestionDocRef, {
+            type: 'question',
+            league: selectedLeague,
+            category: categoryName, // ربط السؤال بالفئة المستوردة
+            question: item.question || 'سؤال فارغ',
+            answer: item.answer || 'لا توجد إجابة',
+            timestamp: Date.now()
+          });
+        });
+
+        // تنفيذ الرفع السحابي دفعة واحدة
+        await batch.commit();
+        alert(`تم استيراد فئة [${categoryName}] ورفع جميع الأسئلة بنجاح! 🎉`);
+      } catch (error) {
+        console.error("Import error:", error);
+        alert('حدث خطأ أثناء معالجة الملف، تأكد من سلامة صيغة الـ JSON المرفوع.');
+      } finally {
+        setImporting(false);
+        e.target.value = ''; // تصفير قيمة الـ input
+      }
+    };
+
+    fileReader.readAsText(file);
+  };
+
+  // --- عمليات إدارة الفئات سحابياً ---
+  const handleAddCategory = async () => {
     const name = newCatName.trim();
     if (!name || categories.includes(name)) return alert('اسم فئة غير صالح أو مكرر!');
-    const updated = [...categories, name];
-    saveStorageData(`cats_curr_season_${selectedLeague}`, updated);
-    setCategories(updated);
-    setNewCatName('');
+    
+    try {
+      await addDoc(collection(database, "currentSeason"), {
+        type: 'category',
+        name: name,
+        league: selectedLeague
+      });
+      setNewCatName('');
+    } catch (e) {
+      alert('خطأ في الاتصال بالسيرفر، لم تضاف الفئة!');
+    }
   };
 
-  const handleDeleteCategory = (catName, e) => {
-    e.stopPropagation(); // منع فتح الفئة عند الضغط على حذف
-    if (!window.confirm(`هل أنت متأكد من حذف فئة [${catName}] وكل أسئلتها؟`)) return;
-    const updatedCats = categories.filter(c => c !== catName);
-    const updatedQs = allQuestions.filter(q => q.category !== catName);
+  const handleDeleteCategory = async (catName, e) => {
+    e.stopPropagation(); 
+    if (!window.confirm(`هل أنت متأكد من حذف فئة [${catName}] وكل أسئلتها نهائياً من الـ Cloud؟`)) return;
     
-    const storageKey = `curr_season_${selectedLeague}`;
-    saveStorageData(`cats_${storageKey}`, updatedCats);
-    saveStorageData(`qs_${storageKey}`, updatedQs);
-    
-    setCategories(updatedCats);
-    setAllQuestions(updatedQs);
+    try {
+      allQuestions.filter(q => q.category === catName).forEach(async (question) => {
+        await deleteDoc(doc(database, "currentSeason", question.id));
+      });
+      alert('تم إرسال طلب حذف الفئة ومحتوياتها للسيرفر! 🗑️');
+    } catch (err) {
+      console.error(err);
+    }
   };
 
-  // --- عمليات إدارة الأسئلة ---
-  const handleSaveQuestion = () => {
+  // --- عمليات إدارة الأسئلة سحابياً ---
+  const handleSaveQuestion = async () => {
     if (!quizForm.question || !quizForm.answer) return alert('أكمل السؤال والجواب أولاً!');
-    const newQ = { id: Date.now(), category: selectedCat, ...quizForm };
-    const updated = [...allQuestions, newQ];
     
-    saveStorageData(`qs_curr_season_${selectedLeague}`, updated);
-    setAllQuestions(updated);
-    setQuizForm({ question: '', answer: '' });
+    try {
+      await addDoc(collection(database, "currentSeason"), {
+        type: 'question',
+        league: selectedLeague,
+        category: selectedCat,
+        question: quizForm.question,
+        answer: quizForm.answer,
+        timestamp: Date.now()
+      });
+      setQuizForm({ question: '', answer: '' });
+    } catch (e) {
+      alert('فشل حفظ السؤال في السيرفر السحابي!');
+    }
   };
 
-  const handleDeleteQuestion = (id) => {
-    const updated = allQuestions.filter(q => q.id !== id);
-    saveStorageData(`qs_curr_season_${selectedLeague}`, updated);
-    setAllQuestions(updated);
+  const handleDeleteQuestion = async (id) => {
+    try {
+      await deleteDoc(doc(database, "currentSeason", id));
+    } catch (e) {
+      alert('فشل الحذف من السيرفر!');
+    }
   };
 
   // --- نظام تشغيل جولة اللعب ---
   const startQuiz = () => {
     const q = allQuestions.filter(q => q.category === selectedCat);
     if (q.length === 0) return alert('الفئة هادي ما فيها أسئلة، ضيف أسئلة من الفورم أولاً!');
-    setFilteredQuestions(q.sort(() => Math.random() - 0.5)); // الخلط العشوائي الصاعق
+    setFilteredQuestions([...q].sort(() => Math.random() - 0.5));
     setCurQIdx(0);
     setRevealAns(false);
     setIsQuizMode(true);
   };
-
 
   // ==========================================
   // الشاشة الرابعة: واجهة اللعب وكشف الإجابة (الكويز)
@@ -175,9 +281,8 @@ export default function CurrentSeason() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* فورم إضافة سؤال جديد للفئة */}
           <div className="bg-slate-800/40 p-6 rounded-3xl border border-white/5 h-fit space-y-4">
-            <h3 className="text-sm font-black text-slate-300 border-b border-white/5 pb-2">➕ حقن سؤال جرس جديد</h3>
+            <h3 className="text-sm font-black text-slate-300 border-b border-white/5 pb-2">➕ حقن سؤال جرس سحابي</h3>
             <textarea 
               className="w-full bg-slate-900 border border-white/10 p-3 rounded-xl text-white outline-none h-20 text-xs font-bold focus:border-yellow-500" 
               placeholder="اكتب السؤال هان..." 
@@ -190,20 +295,19 @@ export default function CurrentSeason() {
               value={quizForm.answer}
               onChange={e => setQuizForm({...quizForm, answer: e.target.value})}
             />
-            <button onClick={handleSaveQuestion} className="w-full bg-slate-700 hover:bg-slate-600 py-3 rounded-xl font-black text-xs">
-              حفظ وتخزين السؤال 💾
+            <button onClick={handleSaveQuestion} className="w-full bg-slate-700 hover:bg-slate-600 py-3 rounded-xl font-black text-xs text-white">
+              حفظ وتخزين أونلاين 💾
             </button>
           </div>
 
-          {/* عرض قائمة الأسئلة الحالية في هذه الفئة */}
           <div className="lg:col-span-2 space-y-3">
-            <h3 className="text-xs font-black text-slate-400 px-1">الأسئلة المدرجة حالياً ({currentCatQuestions.length}):</h3>
+            <h3 className="text-xs font-black text-slate-400 px-1">الأسئلة المدرجة أونلاين ({currentCatQuestions.length}):</h3>
             {currentCatQuestions.length === 0 ? (
               <p className="text-slate-600 text-sm italic p-4 bg-slate-900/20 rounded-2xl border border-dashed border-white/5">لا توجد أسئلة مضافة في هذه الفئة بعد، أضف أول سؤال من الفورم الجانبي!</p>
             ) : (
               <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">
                 {currentCatQuestions.map(q => (
-                  <div key={q.id} className="bg-slate-950/60 p-4 rounded-xl flex justify-between items-center gap-4 border border-white/5">
+                  <div key={q.id} className="bg-slate-950/60 p-4 rounded-xl flex justify-between items-center gap-4 border border-white/5 animate-in fade-in">
                     <span className="text-sm font-bold text-slate-200">
                       ❓ {q.question} <strong className="text-green-400 mr-2">({q.answer})</strong>
                     </span>
@@ -221,7 +325,7 @@ export default function CurrentSeason() {
   }
 
   // ==========================================
-  // الشاشة الثانية: داخل الدوري المختار (إدارة وعرض فئات الأسئلة)
+  // الشاشة الثانية: داخل الدوري المختار
   // ==========================================
   if (selectedLeague) {
     return (
@@ -230,12 +334,20 @@ export default function CurrentSeason() {
           <ArrowLeft size={14}/> رجوع للدوريات الكبرى
         </button>
 
-        <div className="mb-10">
-          <h2 className="text-4xl font-black text-yellow-500 italic">{currentSeasonLeagues[selectedLeague]}</h2>
-          <p className="text-slate-500 text-xs font-bold mt-1">أنشئ فئات الأسئلة الخاصة بهذا الدوري، أو اضغط على الفئة لبدء اللعب وإدارتها</p>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-10">
+          <div>
+            <h2 className="text-4xl font-black text-yellow-500 italic">{currentSeasonLeagues[selectedLeague]}</h2>
+            <p className="text-slate-500 text-xs font-bold mt-1">أنشئ فئات الأسئلة الخاصة بهذا الدوري السحابي</p>
+          </div>
+          
+          {/* زر استيراد ملف الـ JSON الذكي الخاص بالدوريات */}
+          <label className={`flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-3 rounded-xl cursor-pointer border border-white/5 text-xs font-bold transition-all ${importing ? 'opacity-50 pointer-events-none' : ''}`}>
+            <Upload size={16} className="text-yellow-500" />
+            {importing ? 'جاري السحق والرفع السحابي...' : 'استيراد فئة كاملة بأسئلتها (JSON)'}
+            <input type="file" accept=".json" onChange={handleJsonImport} className="hidden" />
+          </label>
         </div>
 
-        {/* سكشن إضافة فئة جديدة داخل هذا الدوري بالذات */}
         <div className="bg-slate-800/40 p-6 rounded-3xl border border-white/5 flex gap-2 items-center mb-8">
           <input 
             className="flex-1 bg-slate-900 border border-white/10 p-3 rounded-xl text-white outline-none text-sm font-bold focus:border-yellow-500" 
@@ -243,20 +355,21 @@ export default function CurrentSeason() {
             value={newCatName} 
             onChange={e => setNewCatName(e.target.value)} 
           />
-          <button onClick={handleAddCategory} className="bg-yellow-500 text-black px-6 py-3 rounded-xl font-black text-xs flex items-center gap-1">
+          <button onClick={handleAddCategory} className="bg-yellow-500 text-black px-6 py-3 rounded-xl font-black text-xs flex items-center gap-1 hover:bg-yellow-400 transition-colors">
             <FolderPlus size={16}/> إضافة فئة
           </button>
         </div>
 
-        {/* استعراض كروت الفئات */}
         <div className="space-y-4">
           <div className="flex items-center gap-2 border-r-4 border-yellow-500 pr-3 mb-4">
             <HelpCircle className="text-yellow-500" size={20} />
             <h3 className="text-lg font-black text-white">فئات التحدي الحالية في الدوري</h3>
           </div>
 
-          {categories.length === 0 ? (
-            <p className="text-slate-600 text-sm italic px-2">لا توجد فئات مضافة لهذا الدوري بعد، اكتب اسم فئة بالأعلى وأنشئها فوراً!</p>
+          {loading ? (
+            <p className="text-slate-400 text-sm animate-pulse">جاري تحديث الفئات لايف...</p>
+          ) : categories.length === 0 ? (
+            <p className="text-slate-600 text-sm italic px-2">لا توجد فئات مضافة لهذا الدوري بعد، اكتب اسم فئة بالأعلى أو ارفع ملف JSON!</p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               {categories.map(catName => {
@@ -273,9 +386,6 @@ export default function CurrentSeason() {
                     </div>
                     <div className="flex items-center gap-2">
                       <Play size={14} className="text-yellow-500 opacity-40 group-hover:opacity-100 transition-all" />
-                      <span onClick={(e) => handleDeleteCategory(catName, e)} className="text-slate-600 hover:text-red-400 p-1 transition-colors">
-                        <Trash2 size={16} />
-                      </span>
                     </div>
                   </button>
                 );
