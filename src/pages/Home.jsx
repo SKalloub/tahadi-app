@@ -18,7 +18,7 @@ export default function Home() {
           تحدي <span className="text-green-500 transition-all hover:text-green-400 cursor-default">30</span>
         </h1>
         <p className="text-slate-400 font-bold tracking-widest uppercase text-xs md:text-sm max-w-md mx-auto leading-relaxed">
-          جهز حالك للمنيكة الكروية على أصولها ⚽🔥
+         مقر تدريبات تحدي الثلاثين⚽🔥
         </p>
       </div>
 
