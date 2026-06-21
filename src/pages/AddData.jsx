@@ -3,7 +3,7 @@ import {
   UserPlus, MessageSquare, Plus, FolderPlus, 
   ArrowRight, Trash2, Download, Upload 
 } from 'lucide-react';
-import { collection, addDoc, deleteDoc, doc, onSnapshot, query, writeBatch, where } from "firebase/firestore";
+import { collection, addDoc, deleteDoc, doc, onSnapshot, query, writeBatch } from "firebase/firestore";
 import { database } from '../App';
 
 export default function AddData() {
@@ -13,7 +13,6 @@ export default function AddData() {
   const categoryFileRef = useRef(null);
   
   const currentAdmin = localStorage.getItem('admin_name') || 'مجهول';
-  const adminCleanName = currentAdmin.trim().toLowerCase();
 
   // --- States ---
   const [playerForm, setPlayerForm] = useState({ name: '', status: 'معتزل', clubs: [''] });
@@ -39,19 +38,28 @@ export default function AddData() {
 
   // --- Real-time Listeners (Firebase) ---
   useEffect(() => {
-    // 1. استماع حي للاعبين (مع فلترة المنبع لحساب harak)
-    let qPlayers = query(collection(database, "players"));
-    if (adminCleanName === "harak") {
-      qPlayers = query(collection(database, "players"), where("addedBy", "==", "harak"));
-    }
+    // جلب الاسم المخزن وفحصه للأمان والفلترة
+    const storedName = currentAdmin.trim().toLowerCase();
+    const isHarak = storedName === "harak" || storedName.includes("حراك") || storedName.includes("أحمد hراك");
+    const isKarim = storedName === "karim" || storedName.includes("كريم");
+    const isRegularUser = isHarak || isKarim;
+
+    // 1. استماع حي للاعبين مع الفلترة بداخل الـ Client
+    const qPlayers = query(collection(database, "players"));
     const unsubscribePlayers = onSnapshot(qPlayers, (snapshot) => {
       const playersList = [];
       const pCatsSet = new Set(['عام']);
+      
       snapshot.forEach((doc) => {
         const data = doc.data();
         const docAddedBy = (data.addedBy || "").trim().toLowerCase();
         
-        if (adminCleanName !== "harak" || docAddedBy === "harak") {
+        // فحص الصلاحية لكل لاعب على حدة
+        let shouldInclude = !isRegularUser;
+        if (isHarak && (docAddedBy === "harak" || docAddedBy.includes("حراك"))) shouldInclude = true;
+        if (isKarim && (docAddedBy === "karim" || docAddedBy.includes("كريم"))) shouldInclude = true;
+
+        if (shouldInclude) {
           playersList.push({ ...data, id: doc.id });
           if (data.category) pCatsSet.add(data.category);
         }
@@ -60,19 +68,22 @@ export default function AddData() {
       setPlayerCategories(Array.from(pCatsSet));
     });
 
-    // 2. استماع حي لأسئلة الجرس (مع فلترة المنبع لحساب harak)
-    let qBell = query(collection(database, "bellQuestions"));
-    if (adminCleanName === "harak") {
-      qBell = query(collection(database, "bellQuestions"), where("addedBy", "==", "harak"));
-    }
+    // 2. استماع حي لأسئلة الجرس مع الفلترة بداخل الـ Client
+    const qBell = query(collection(database, "bellQuestions"));
     const unsubscribeBell = onSnapshot(qBell, (snapshot) => {
       const bellList = [];
       const catsSet = new Set(['عام']);
+      
       snapshot.forEach((doc) => {
         const data = doc.data();
         const docAddedBy = (data.addedBy || "").trim().toLowerCase();
+        
+        // فحص الصلاحية لكل سؤال جرس
+        let shouldInclude = !isRegularUser;
+        if (isHarak && (docAddedBy === "harak" || docAddedBy.includes("حراك"))) shouldInclude = true;
+        if (isKarim && (docAddedBy === "karim" || docAddedBy.includes("كريم"))) shouldInclude = true;
 
-        if (adminCleanName !== "harak" || docAddedBy === "harak") {
+        if (shouldInclude) {
           bellList.push({ ...data, id: doc.id });
           if (data.category) catsSet.add(data.category);
         }
@@ -85,7 +96,7 @@ export default function AddData() {
       unsubscribePlayers();
       unsubscribeBell();
     };
-  }, [adminCleanName]);
+  }, [currentAdmin]);
 
   // تحديث داتا اللاعبين التابعين للفئة المحددة للتعويض
   useEffect(() => {

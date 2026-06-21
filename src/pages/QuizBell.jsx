@@ -12,18 +12,43 @@ export default function QuizBell() {
   const [showAnswer, setShowAnswer] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // استماع حي ومباشر للأسئلة من السيرفر
   useEffect(() => {
+    // جلب الاسم المخزن وتجهيزه للمقارنة بشتى الطرق
+    const storedName = (localStorage.getItem('admin_name') || '').trim().toLowerCase();
+    
+    // فحص شامل: هل الاسم حراك (إنجليزي أو عربي) أو كريم (إنجليزي أو عربي)؟
+    const isHarak = storedName === "harak" || storedName.includes("حراك") || storedName.includes("أحمد حراك");
+    const isKarim = storedName === "karim" || storedName.includes("كريم");
+    const isRegularUser = isHarak || isKarim;
+
     const q = query(collection(database, "bellQuestions"));
+    
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const questionsList = [];
       const catsSet = new Set();
 
       snapshot.forEach((doc) => {
         const data = doc.data();
+        const docAddedBy = (data.addedBy || "").trim().toLowerCase();
         const cat = data.category || 'عام';
-        questionsList.push({ ...data, id: doc.id, category: cat });
-        catsSet.add(cat);
+
+        // شرط الفلترة المحصن:
+        // إذا كان أدمن -> يمرق كل شي
+        // إذا كان حراك -> يمرق فقط الإشي اللي فيه harak أو حراك
+        // إذا كان كريم -> يمرق فقط الإشي اللي فيه karim أو كريم
+        let shouldInclude = !isRegularUser; 
+        
+        if (isHarak && (docAddedBy === "harak" || docAddedBy.includes("حراك"))) {
+          shouldInclude = true;
+        }
+        if (isKarim && (docAddedBy === "karim" || docAddedBy.includes("كريم"))) {
+          shouldInclude = true;
+        }
+
+        if (shouldInclude) {
+          questionsList.push({ ...data, id: doc.id, category: cat });
+          catsSet.add(cat);
+        }
       });
 
       setAllQuestions(questionsList);
@@ -34,11 +59,9 @@ export default function QuizBell() {
     return () => unsubscribe();
   }, []);
 
-  // تحديث قائمة الأسئلة المفلترة لايف لو حدث تغيير على السيرفر أثناء اللعب
   useEffect(() => {
     if (selectedCategory) {
       const filtered = allQuestions.filter(q => q.category === selectedCategory);
-      // بنحدث الأسئلة بس بدون ما نخرب ترتيب الـ shuffle الحالي إلا لو خلصت الأسئلة
       if (filtered.length === 0) {
         setSelectedCategory(null);
       }
@@ -49,7 +72,6 @@ export default function QuizBell() {
     const filtered = allQuestions.filter(q => q.category === cat);
     if (filtered.length === 0) return alert('هذه الفئة فارغة على السيرفر!');
     
-    // خلط عشوائي صاعق عند بدء الجولة
     setFilteredQuestions([...filtered].sort(() => Math.random() - 0.5));
     setSelectedCategory(cat);
     setCurrentIndex(0);
@@ -63,7 +85,6 @@ export default function QuizBell() {
     if (!window.confirm('هل تريد حذف هذا السؤال نهائياً من السيرفر المشترك؟')) return;
     
     try {
-      // حذف حقيقي من السيرفر
       await deleteDoc(doc(database, "bellQuestions", currentQ.id));
       
       const updatedFiltered = filteredQuestions.filter((_, i) => i !== currentIndex);

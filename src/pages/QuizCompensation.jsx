@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { PlayCircle, SkipForward, Trophy, HelpCircle, Trash2, ArrowLeft, LayoutGrid, Play } from 'lucide-react';
-import { collection, onSnapshot, query, deleteDoc, doc, where } from "firebase/firestore";
+import { collection, onSnapshot, query, deleteDoc, doc } from "firebase/firestore";
 import { database } from '../App';
 
 export default function QuizCompensation() {
@@ -14,14 +14,15 @@ export default function QuizCompensation() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const adminCleanName = (localStorage.getItem('admin_name') || 'مجهول').trim().toLowerCase();
+    // جلب الاسم المخزن وتجهيزه للمقارنة بشتى الطرق
+    const storedName = (localStorage.getItem('admin_name') || '').trim().toLowerCase();
     
-    let q;
-    if (adminCleanName === "harak") {
-      q = query(collection(database, "players"), where("addedBy", "==", "harak"));
-    } else {
-      q = query(collection(database, "players"));
-    }
+    // فحص شامل: هل الاسم حراك (إنجليزي أو عربي) أو كريم (إنجليزي أو عربي)؟
+    const isHarak = storedName === "harak" || storedName.includes("حراك") || storedName.includes("أحمد حراك");
+    const isKarim = storedName === "karim" || storedName.includes("كريم");
+    const isRegularUser = isHarak || isKarim;
+    
+    const q = query(collection(database, "players"));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const playersList = [];
@@ -32,7 +33,17 @@ export default function QuizCompensation() {
         const docAddedBy = (data.addedBy || "").trim().toLowerCase();
         const cat = data.category || 'عام';
 
-        if (adminCleanName !== "harak" || docAddedBy === "harak") {
+        // شرط الفلترة المحصن:
+        let shouldInclude = !isRegularUser; 
+        
+        if (isHarak && (docAddedBy === "harak" || docAddedBy.includes("حراك"))) {
+          shouldInclude = true;
+        }
+        if (isKarim && (docAddedBy === "karim" || docAddedBy.includes("كريم"))) {
+          shouldInclude = true;
+        }
+
+        if (shouldInclude) {
           playersList.push({ ...data, id: doc.id, category: cat });
           catsSet.add(cat);
         }
@@ -80,7 +91,6 @@ export default function QuizCompensation() {
 
   if (loading) return <div className="text-center mt-20 text-slate-400 font-bold text-lg animate-pulse">جاري سحب مسيرات التعويض... 🌐</div>;
 
-  // شاشة اختيار كاتيغوري التعويض
   if (!selectedCategory) {
     return (
       <div dir="rtl" className="max-w-2xl mx-auto mt-10 p-6 font-sans">
