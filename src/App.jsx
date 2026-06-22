@@ -16,10 +16,9 @@ import QuizCompensation from './pages/QuizCompensation';
 import QuizBell from './pages/QuizBell';
 import AddNumbers from './pages/AddNumbers';
 import QuizNumbers from './pages/QuizNumbers';
-import AddTables from './pages/AddTables';   
-import QuizTables from './pages/QuizTables'; 
 import CurrentSeason from './pages/CurrentSeason'; 
 import Archive from './pages/Archive'; 
+import QuizObjectives from './pages/QuizObjectives';
 
 // --- Firebase Config الجديدة ---
 const firebaseConfig = {
@@ -187,10 +186,9 @@ function App() {
             <Route path="/quiz-bell" element={<QuizBell />} />
             <Route path="/add-numbers" element={<AddNumbers />} />
             <Route path="/quiz-numbers" element={<QuizNumbers />} />
-            <Route path="/add-tables" element={<AddTables />} />
-            <Route path="/quiz-tables" element={<QuizTables />} />
             <Route path="/current-season" element={<CurrentSeason />} />
             <Route path="/archive" element={<Archive />} />
+            <Route path="/quiz-objectives" element={<QuizObjectives />} />
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
         </main>

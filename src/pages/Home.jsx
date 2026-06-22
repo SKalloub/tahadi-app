@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Zap, Bell, PlusCircle, Hash, Table as TableIcon, Layout, Trophy } from 'lucide-react';
+import { Zap, Bell, PlusCircle, Hash, Target } from 'lucide-react';
 
 export default function Home() {
   const navigate = useNavigate();
@@ -64,70 +64,26 @@ export default function Home() {
             <div className="mt-4 text-xs font-black text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300">ابدأ الآن ←</div>
           </button>
 
-          {/* كرت الجداول */}
+          {/* كرت الأوبجكتيفس الجديد بالملي */}
           <button 
-            onClick={() => goTo('/quiz-tables')}
+            onClick={() => goTo('/quiz-objectives')}
             className="group relative bg-slate-900/40 backdrop-blur-md p-8 rounded-[2rem] border border-white/5 hover:border-purple-500/40 transition-all duration-300 hover:-translate-y-1.5 flex flex-col items-end shadow-xl text-right overflow-hidden"
           >
             <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/5 blur-[50px] rounded-full pointer-events-none group-hover:bg-purple-500/10 transition-all"></div>
-            <TableIcon className="text-purple-500 mb-5 w-12 h-12 group-hover:scale-110 group-hover:drop-shadow-[0_0_15px_rgba(168,85,247,0.4)] transition-all duration-300" />
-            <h3 className="text-xl font-black mb-2 text-white">فقرة الجداول</h3>
-            <p className="text-slate-400 text-sm leading-relaxed">تاريخ البطولات، مجموعات كأس العالم، وأي داتا دقيقة.</p>
-            <div className="mt-4 text-xs font-black text-purple-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300">ابدأ الآن ←</div>
+            <Target className="text-purple-500 mb-5 w-12 h-12 group-hover:scale-110 group-hover:drop-shadow-[0_0_15px_rgba(168,85,247,0.4)] transition-all duration-300" />
+            <h3 className="text-xl font-black mb-2 text-white">قائمة المهام Objectives</h3>
+            <p className="text-slate-400 text-sm leading-relaxed">إدارة ومتابعة أهداف (جرس ومستحيل، المزاد، ماذا تعرف).</p>
+            <div className="mt-4 text-xs font-black text-purple-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300">استعرض المهام ←</div>
           </button>
 
         </div>
-
-        {/* كرت كأس العالم العريض والهندسي الخرافي (الوحيد بالسطر السفلي) */}
-        <button 
-          onClick={() => goTo('/quiz-worldcup')}
-          className="group relative w-full bg-gradient-to-l from-amber-950/20 via-slate-900/40 to-slate-900/20 backdrop-blur-md p-8 rounded-[2rem] border border-amber-500/20 hover:border-amber-500/60 transition-all duration-300 hover:-translate-y-1.5 flex flex-col md:flex-row items-center md:justify-between gap-6 shadow-2xl overflow-hidden text-right"
-        >
-          {/* شعلة الإضاءة الخلفية للذهب */}
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-amber-500/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out pointer-events-none"></div>
-          
-          {/* الجزء الأيسر: شارة جديد + زر السهم بالكمبيوتر */}
-          <div className="flex items-center gap-4 order-2 md:order-1 w-full md:w-auto justify-between md:justify-start">
-            <div className="text-sm font-black text-amber-500 hidden md:block opacity-0 group-hover:opacity-100 group-hover:translate-x-2 transition-all duration-300">
-              ← عيش المونديال
-            </div>
-            <span className="relative flex h-3 w-3 md:hidden">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
-            </span>
-          </div>
-
-          {/* الجزء الأيمن: الأيقونة الكبيرة والنص والشارة */}
-          <div className="flex flex-col sm:flex-row items-center sm:items-start md:items-center gap-5 order-1 md:order-2 w-full sm:w-auto">
-            <div className="text-center sm:text-right space-y-1">
-              <div className="flex items-center justify-center sm:justify-end gap-2.5">
-                {/* شارة "جديد" المضيئة بشكل احترافي */}
-                <span className="bg-amber-500 text-black text-[10px] font-black px-2.5 py-0.5 rounded-md uppercase tracking-wider shadow-md animate-pulse">
-                  جديد ✨
-                </span>
-                <h3 className="text-2xl font-black text-white group-hover:text-amber-400 transition-colors">
-                  تحدي كأس العالم الأسطوري
-                </h3>
-              </div>
-              <p className="text-slate-400 text-sm max-w-xl leading-relaxed">
-                تاريخ المونديال من الأورغواي 1930، الهدافين التاريخيين، المنجزات، وإحصائيات تكسر الرؤوس.
-              </p>
-            </div>
-            
-            {/* أيقونة الكأس الذهبية الفخمة */}
-            <div className="p-4 bg-amber-500/10 rounded-2xl border border-amber-500/20 group-hover:bg-amber-500/20 transition-colors duration-300 shrink-0">
-              <Trophy className="text-amber-500 w-12 h-12 group-hover:scale-110 group-hover:drop-shadow-[0_0_20px_rgba(245,158,11,0.6)] transition-all duration-300" />
-            </div>
-          </div>
-        </button>
-
       </div>
 
       {/* Footer Settings/Add Section */}
-      <div className="flex flex-wrap justify-center gap-3 mt-4 bg-slate-900/30 p-3.5 rounded-[2rem] border border-white/5 shadow-inner max-w-4xl w-full mx-4 backdrop-blur-sm">
+      <div className="flex flex-wrap justify-center gap-3 mt-4 bg-slate-900/30 p-3.5 rounded-[2rem] border border-white/5 shadow-inner max-w-2xl w-full mx-4 backdrop-blur-sm">
         <button 
           onClick={() => goTo('/add')}
-          className="flex items-center gap-2 bg-white/5 hover:bg-white/10 px-5 py-3 rounded-xl text-slate-300 hover:text-white transition-all border border-white/5 text-xs font-bold"
+          className="flex items-center gap-2 bg-white/5 hover:bg-white/10 px-6 py-3 rounded-xl text-slate-300 hover:text-white transition-all border border-white/5 text-xs font-bold flex-1 justify-center"
         >
           <PlusCircle size={16} className="text-green-500" />
           <span>إدارة (تعويض / جرس)</span>
@@ -135,26 +91,10 @@ export default function Home() {
 
         <button 
           onClick={() => goTo('/add-numbers')}
-          className="flex items-center gap-2 bg-white/5 hover:bg-white/10 px-5 py-3 rounded-xl text-slate-300 hover:text-white transition-all border border-white/5 text-xs font-bold"
+          className="flex items-center gap-2 bg-white/5 hover:bg-white/10 px-6 py-3 rounded-xl text-slate-300 hover:text-white transition-all border border-white/5 text-xs font-bold flex-1 justify-center"
         >
           <Hash size={16} className="text-blue-500" />
           <span>إدارة الأرقام</span>
-        </button>
-
-        <button 
-          onClick={() => goTo('/add-tables')}
-          className="flex items-center gap-2 bg-white/5 hover:bg-white/10 px-5 py-3 rounded-xl text-slate-300 hover:text-white transition-all border border-white/5 text-xs font-bold"
-        >
-          <Layout size={16} className="text-purple-500" />
-          <span>إدارة الجداول</span>
-        </button>
-
-        <button 
-          onClick={() => goTo('/add-worldcup')}
-          className="flex items-center gap-2 bg-amber-500/10 hover:bg-amber-500/20 px-5 py-3 rounded-xl text-amber-400 hover:text-amber-300 transition-all border border-amber-500/20 text-xs font-bold shadow-md"
-        >
-          <Trophy size={14} className="text-amber-500" />
-          <span>إدارة كأس العالم</span>
         </button>
       </div>
     </div>
