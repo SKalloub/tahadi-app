@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   UserPlus, MessageSquare, Plus, FolderPlus, 
-  ArrowRight, Trash2, Download, Upload 
+  ArrowRight, Trash2, Download, Upload, Edit2 
 } from 'lucide-react';
 import { collection, addDoc, deleteDoc, doc, onSnapshot, query, writeBatch } from "firebase/firestore";
 import { database } from '../App';
@@ -9,8 +9,6 @@ import { database } from '../App';
 export default function AddData() {
   const [activeTab, setActiveTab] = useState('player');
   const globalFileRef = useRef(null);
-  const playerFileRef = useRef(null);
-  const categoryFileRef = useRef(null);
   
   const currentAdmin = localStorage.getItem('admin_name') || 'مجهول';
 
@@ -33,18 +31,14 @@ export default function AddData() {
   const [allBellQuestions, setAllBellQuestions] = useState([]);
   const [categoryQuestions, setCategoryQuestions] = useState([]);
 
-  const [importingPlayers, setImportingPlayers] = useState(false);
-  const [importingCat, setImportingCat] = useState(false);
-
   // --- Real-time Listeners (Firebase) ---
   useEffect(() => {
-    // جلب الاسم المخزن وفحصه للأمان والفلترة
     const storedName = currentAdmin.trim().toLowerCase();
     const isHarak = storedName === "harak" || storedName.includes("حراك") || storedName.includes("أحمد hراك");
     const isKarim = storedName === "karim" || storedName.includes("كريم");
     const isRegularUser = isHarak || isKarim;
 
-    // 1. استماع حي للاعبين مع الفلترة بداخل الـ Client
+    // 1. استماع حي للاعبين
     const qPlayers = query(collection(database, "players"));
     const unsubscribePlayers = onSnapshot(qPlayers, (snapshot) => {
       const playersList = [];
@@ -54,7 +48,6 @@ export default function AddData() {
         const data = doc.data();
         const docAddedBy = (data.addedBy || "").trim().toLowerCase();
         
-        // فحص الصلاحية لكل لاعب على حدة
         let shouldInclude = !isRegularUser;
         if (isHarak && (docAddedBy === "harak" || docAddedBy.includes("حراك"))) shouldInclude = true;
         if (isKarim && (docAddedBy === "karim" || docAddedBy.includes("كريم"))) shouldInclude = true;
@@ -68,7 +61,7 @@ export default function AddData() {
       setPlayerCategories(Array.from(pCatsSet));
     });
 
-    // 2. استماع حي لأسئلة الجرس مع الفلترة بداخل الـ Client
+    // 2. استماع حي لأسئلة الجرس
     const qBell = query(collection(database, "bellQuestions"));
     const unsubscribeBell = onSnapshot(qBell, (snapshot) => {
       const bellList = [];
@@ -78,7 +71,6 @@ export default function AddData() {
         const data = doc.data();
         const docAddedBy = (data.addedBy || "").trim().toLowerCase();
         
-        // فحص الصلاحية لكل سؤال جرس
         let shouldInclude = !isRegularUser;
         if (isHarak && (docAddedBy === "harak" || docAddedBy.includes("حراك"))) shouldInclude = true;
         if (isKarim && (docAddedBy === "karim" || docAddedBy.includes("كريم"))) shouldInclude = true;
@@ -98,14 +90,14 @@ export default function AddData() {
     };
   }, [currentAdmin]);
 
-  // تحديث داتا اللاعبين التابعين للفئة المحددة للتعويض
+  // تحديث داتا اللاعبين
   useEffect(() => {
     if (selectedPlayerCategory) {
       setFilteredPlayersList(allPlayers.filter(p => p.category === selectedPlayerCategory));
     }
   }, [selectedPlayerCategory, allPlayers]);
 
-  // تحديث أسئلة الفئة المحددة للجرس
+  // تحديث أسئلة الجرس
   useEffect(() => {
     if (selectedCategory) {
       setCategoryQuestions(allBellQuestions.filter(q => q.category === selectedCategory));
@@ -167,6 +159,32 @@ export default function AddData() {
     setNewPlayerCatFolder('');
   };
 
+  const editPlayerCategory = async (oldCatName, e) => {
+    e.stopPropagation();
+    const currentFolder = oldCatName.includes(' // ') ? oldCatName.split(' // ')[0] : 'عام';
+    const currentName = oldCatName.includes(' // ') ? oldCatName.split(' // ')[1] : oldCatName;
+
+    const newFolder = prompt("أدخل اسم المجلد الجديد:", currentFolder);
+    if (newFolder === null) return; 
+    const newName = prompt("أدخل اسم الفئة الجديد:", currentName);
+    if (!newName || !newName.trim()) return alert("اسم الفئة لا يمكن أن يكون فارغاً!");
+
+    const fullNewCatName = `${newFolder.trim() || 'عام'} // ${newName.trim()}`;
+    const related = allPlayers.filter(p => p.category === oldCatName);
+
+    if (!window.confirm(`تعديل الفئة لـ [${fullNewCatName}]؟\nسيتم تحديث (${related.length}) لاعب مرتبطة بها سحابياً.`)) return;
+
+    try {
+      const batch = writeBatch(database);
+      related.forEach(p => {
+        const docRef = doc(database, "players", p.id);
+        batch.update(docRef, { category: fullNewCatName });
+      });
+      await batch.commit();
+      alert('تم تحديث الفئة وجميع اللاعبين التابعين لها بنجاح!');
+    } catch (err) { alert('حدث خطأ أثناء التعديل السحابي!'); }
+  };
+
   const deletePlayerCategory = async (catName, e) => {
     e.stopPropagation();
     const related = allPlayers.filter(p => p.category === catName);
@@ -205,6 +223,32 @@ export default function AddData() {
     setCategories([...categories, fullCatName]);
     setNewCategoryName('');
     setNewCategoryFolder('');
+  };
+
+  const editBellCategory = async (oldCatName, e) => {
+    e.stopPropagation();
+    const currentFolder = oldCatName.includes(' // ') ? oldCatName.split(' // ')[0] : 'عام';
+    const currentName = oldCatName.includes(' // ') ? oldCatName.split(' // ')[1] : oldCatName;
+
+    const newFolder = prompt("أدخل اسم المجلد الجديد:", currentFolder);
+    if (newFolder === null) return;
+    const newName = prompt("أدخل اسم الفئة الجديد:", currentName);
+    if (!newName || !newName.trim()) return alert("اسم الفئة لا يمكن أن يكون فارغاً!");
+
+    const fullNewCatName = `${newFolder.trim() || 'عام'} // ${newName.trim()}`;
+    const related = allBellQuestions.filter(q => q.category === oldCatName);
+
+    if (!window.confirm(`تعديل الفئة لـ [${fullNewCatName}]؟\nسيتم تحديث (${related.length}) سؤال مرتبط بها سحابياً.`)) return;
+
+    try {
+      const batch = writeBatch(database);
+      related.forEach(q => {
+        const docRef = doc(database, "bellQuestions", q.id);
+        batch.update(docRef, { category: fullNewCatName });
+      });
+      await batch.commit();
+      alert('تم تحديث الفئة وجميع أسئلة الجرس التابعة لها بنجاح!');
+    } catch (err) { alert('حدث خطأ أثناء التعديل السحابي!'); }
   };
 
   const deleteCategory = async (catName, e) => {
@@ -279,6 +323,7 @@ export default function AddData() {
                       name={cat.includes(' // ') ? cat.split(' // ')[1] : cat} 
                       folderName={cat.includes(' // ') ? cat.split(' // ')[0] : 'عام'} 
                       onClick={() => setSelectedPlayerCategory(cat)} 
+                      onEdit={(e) => editPlayerCategory(cat, e)}
                       onDelete={(e) => deletePlayerCategory(cat, e)} 
                       isDeletable={cat !== 'عام'}
                       accentColor="text-green-400 border-green-500/10 bg-green-500/10"
@@ -354,6 +399,7 @@ export default function AddData() {
                       name={cat.includes(' // ') ? cat.split(' // ')[1] : cat} 
                       folderName={cat.includes(' // ') ? cat.split(' // ')[0] : 'عام'} 
                       onClick={() => setSelectedCategory(cat)} 
+                      onEdit={(e) => editBellCategory(cat, e)}
                       onDelete={(e) => deleteCategory(cat, e)}
                       isDeletable={cat !== 'عام'} 
                       accentColor="text-yellow-500 border-yellow-500/10 bg-yellow-500/10"
@@ -401,7 +447,7 @@ const TabButton = ({ active, onClick, icon, label, activeColor }) => (
   </button>
 );
 
-const CategoryCard = ({ name, folderName, onClick, onDelete, isDeletable, accentColor }) => (
+const CategoryCard = ({ name, folderName, onClick, onEdit, onDelete, isDeletable, accentColor }) => (
   <div className="relative group">
     <button onClick={onClick} className="w-full bg-slate-800/60 hover:bg-slate-700 p-6 rounded-3xl border border-white/5 text-center transition-all shadow-lg active:scale-95 flex flex-col items-center justify-center min-h-[140px]">
       <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold mb-2 border ${accentColor}`}>📁 {folderName || 'عام'}</span>
@@ -409,9 +455,14 @@ const CategoryCard = ({ name, folderName, onClick, onDelete, isDeletable, accent
       <span className="text-slate-400 text-[10px] font-bold mt-2 opacity-45 group-hover:opacity-100 transition-all uppercase">عرض المحتوى ←</span>
     </button>
     {isDeletable && (
-      <button onClick={onDelete} className="absolute top-3 left-3 p-2 text-slate-500 hover:text-red-500 bg-slate-900/40 hover:bg-slate-900 rounded-xl border border-white/5 opacity-0 group-hover:opacity-100 transition-all shadow-md">
-        <Trash2 size={14} />
-      </button>
+      <div className="absolute top-3 left-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+        <button onClick={onEdit} className="p-2 text-slate-400 hover:text-yellow-400 bg-slate-900/60 hover:bg-slate-900 rounded-xl border border-white/5 shadow-md transition-colors" title="تعديل الاسم">
+          <Edit2 size={13} />
+        </button>
+        <button onClick={onDelete} className="p-2 text-slate-500 hover:text-red-500 bg-slate-900/60 hover:bg-slate-900 rounded-xl border border-white/5 shadow-md transition-colors" title="حذف الفئة">
+          <Trash2 size={13} />
+        </button>
+      </div>
     )}
   </div>
 );

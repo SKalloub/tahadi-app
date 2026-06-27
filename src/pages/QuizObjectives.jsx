@@ -10,7 +10,12 @@ export default function QuizObjectives() {
   const [tasks, setTasks] = useState([]);
   const [newTaskText, setNewTaskText] = useState('');
   
-  const currentAdmin = localStorage.getItem('admin_name') || 'مجهول';
+  // جلب اسم المستخدم الحالي، وإذا لم يوجد نعتبره يوزر عادي (مثلاً اسم جهازه أو مجهول)
+  const currentAdmin = localStorage.getItem('admin_name') || 'يوزر عادي';
+
+  // لستة الأسماء المعتمدة كـ Admins بالمقر (عدلها وضيق عليها حسب رغبتك)
+  const adminList = ['Saeed', 'Saeed Kalloub', 'Admin']; 
+  const isAdmin = adminList.includes(currentAdmin);
 
   // الثلاث فئات الثابتة المطلوبة
   const categories = [
@@ -40,7 +45,7 @@ export default function QuizObjectives() {
         text: newTaskText.trim(),
         category: selectedCategory.id,
         completed: false,
-        addedBy: currentAdmin,
+        addedBy: currentAdmin, // بنسجل مين اللي أضافها
         timestamp: Date.now()
       });
       setNewTaskText('');
@@ -70,12 +75,24 @@ export default function QuizObjectives() {
     }
   };
 
-  // تصفية المهام حسب الفئة المفتوحة حالياً
-  const filteredTasks = tasks.filter(t => t.category === selectedCategory?.id);
+  // الفلترة السحرية حسب الصلاحية:
+  // الأدمن يشوف كل المهام، اليوزر يشوف بس المهام اللي "addedBy" تطابق اسمه الحالي
+  const visibleTasks = tasks.filter(t => {
+    if (isAdmin) return true; // الأدمن يرى كل شيء
+    return t.addedBy === currentAdmin; // اليوزر يرى أهدافه فقط
+  });
+
+  // تصفية المهام حسب الفئة المفتوحة حالياً من ضمن المهام المسموح برؤيتها
+  const filteredTasks = visibleTasks.filter(t => t.category === selectedCategory?.id);
 
   return (
     <div dir="rtl" className="max-w-2xl mx-auto py-8 px-4 pb-20 font-sans min-h-[85vh] text-white">
       
+      {/* البار العلوي التوضيحي لمعرفة الحساب المفتوح */}
+      <div className="text-[11px] text-left text-slate-500 mb-2 px-2">
+        المستخدم الحالي: <span className={isAdmin ? "text-purple-400 font-bold" : "text-slate-400"}>{currentAdmin} {isAdmin ? "(أدمن)" : "(لاعب)"}</span>
+      </div>
+
       {/* الشاشة الأولى: اختيار الفئة */}
       {!selectedCategory ? (
         <div className="space-y-6 animate-in fade-in duration-300">
@@ -86,8 +103,9 @@ export default function QuizObjectives() {
 
           <div className="grid grid-cols-1 gap-4">
             {categories.map(cat => {
-              const catTasksCount = tasks.filter(t => t.category === cat.id).length;
-              const completedCount = tasks.filter(t => t.category === cat.id && t.completed).length;
+              // حساب العدادات بناءً على ما يُسمح للمستخدم برؤيته
+              const catTasksCount = visibleTasks.filter(t => t.category === cat.id).length;
+              const completedCount = visibleTasks.filter(t => t.category === cat.id && t.completed).length;
 
               return (
                 <button 
@@ -97,7 +115,9 @@ export default function QuizObjectives() {
                 >
                   <div className="flex flex-col gap-1">
                     <span className="font-black text-lg text-white group-hover:text-purple-400 transition-colors">{cat.name}</span>
-                    <span className="text-xs text-slate-400 font-bold">المهام: ({completedCount} من {catTasksCount} مكتمل)</span>
+                    <span className="text-xs text-slate-400 font-bold">
+                      {isAdmin ? "إجمالي مهام المقر:" : "مهامي المضافة:"} ({completedCount} من {catTasksCount} مكتمل)
+                    </span>
                   </div>
                   <span className={`text-xs font-black px-3 py-1.5 rounded-xl border ${cat.color}`}>
                     عرض المهام ←
@@ -132,10 +152,12 @@ export default function QuizObjectives() {
 
           {/* عرض لستة المهام مع التشيك لايف */}
           <div className="space-y-3">
-            <h4 className="text-slate-400 text-[11px] font-black px-1">المهام الحالية ({filteredTasks.length})</h4>
+            <h4 className="text-slate-400 text-[11px] font-black px-1">
+              {isAdmin ? "كل المهام الحالية بالفئة" : "مهامي الحالية بالفئة"} ({filteredTasks.length})
+            </h4>
             
             {filteredTasks.length === 0 ? (
-              <p className="text-center text-slate-500 text-xs py-8">لا يوجد مهام مضافة في هذه الفئة بعد. ضيف أول مهمة فوق! 🚀</p>
+              <p className="text-center text-slate-500 text-xs py-8">لا يوجد مهام لعرضها هنا حالياً. ضيف أول مهمة فوق! 🚀</p>
             ) : (
               filteredTasks.map(task => (
                 <div 
@@ -153,10 +175,14 @@ export default function QuizObjectives() {
                       <p className={`text-sm font-bold truncate ${task.completed ? 'text-slate-500 line-through font-medium' : 'text-white'}`}>
                         {task.text}
                       </p>
-                      <span className="text-[9px] text-slate-500 font-medium">بواسطة: {task.addedBy}</span>
+                      {/* يظهر اسم كاتب المهمة للأدمن فقط لزيادة الترتيب */}
+                      {isAdmin && (
+                        <span className="text-[9px] text-purple-400/70 font-medium block mt-0.5">بواسطة: {task.addedBy}</span>
+                      )}
                     </div>
                   </div>
 
+                  {/* الحذف متاح دائماً لليوزر على مهامه، وللأدمن على كل شيء */}
                   <button 
                     onClick={(e) => handleDeleteTask(task.id, e)}
                     className="p-2 text-slate-600 hover:text-red-500 transition-colors mr-2"
